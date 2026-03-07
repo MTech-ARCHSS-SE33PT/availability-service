@@ -8,15 +8,15 @@ namespace AvailabilityService.Controllers;
 [Route("availability/rules")]
 public class AvailabilityRulesController : ControllerBase
 {
-    private readonly InMemoryAvailabilityStore _store;
+    private readonly IAvailabilityRepository _repository;
 
-    public AvailabilityRulesController(InMemoryAvailabilityStore store)
+    public AvailabilityRulesController(IAvailabilityRepository repository)
     {
-        _store = store;
+        _repository = repository;
     }
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateRuleRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateRuleRequest request, CancellationToken ct)
     {
         if (request.DayOfWeek < 1 || request.DayOfWeek > 7)
         {
@@ -50,26 +50,23 @@ public class AvailabilityRulesController : ControllerBase
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        _store.Rules[rule.RuleId] = rule;
+        await _repository.AddRuleAsync(rule, ct);
         return Created($"/availability/rules/{rule.RuleId}", rule);
     }
 
     [HttpGet]
-    public IActionResult Get([FromQuery] Guid tenantId, [FromQuery] Guid serviceId)
+    public async Task<IActionResult> Get([FromQuery] Guid tenantId, [FromQuery] Guid serviceId, CancellationToken ct)
     {
-        var rules = _store.Rules.Values
-            .Where(r => r.TenantId == tenantId && r.ServiceId == serviceId)
-            .OrderBy(r => r.DayOfWeek)
-            .ThenBy(r => r.OperatingStartTime)
-            .ToList();
+        var rules = await _repository.GetRulesAsync(tenantId, serviceId, ct);
 
         return Ok(rules);
     }
 
     [HttpPatch("{ruleId:guid}")]
-    public IActionResult Patch(Guid ruleId, [FromBody] UpdateRuleRequest request)
+    public async Task<IActionResult> Patch(Guid ruleId, [FromBody] UpdateRuleRequest request, CancellationToken ct)
     {
-        if (!_store.Rules.TryGetValue(ruleId, out var rule))
+        var rule = await _repository.GetRuleAsync(ruleId, ct);
+        if (rule is null)
         {
             return NotFound(Error("ruleId not found"));
         }
@@ -105,21 +102,23 @@ public class AvailabilityRulesController : ControllerBase
             rule.IsActive = request.IsActive.Value;
         }
 
+        await _repository.UpdateRuleAsync(rule, ct);
         return Ok(rule);
     }
 
     [HttpPost("{ruleId:guid}/deactivate")]
-    public IActionResult Deactivate(Guid ruleId)
+    public async Task<IActionResult> Deactivate(Guid ruleId, CancellationToken ct)
     {
-        if (!_store.Rules.TryGetValue(ruleId, out var rule))
+        var rule = await _repository.GetRuleAsync(ruleId, ct);
+        if (rule is null)
         {
             return NotFound(Error("ruleId not found"));
         }
 
         rule.IsActive = false;
+        await _repository.UpdateRuleAsync(rule, ct);
         return Ok(rule);
     }
 
     private static object Error(string message) => new { error = message };
 }
-

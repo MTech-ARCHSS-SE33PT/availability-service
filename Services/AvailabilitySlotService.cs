@@ -6,26 +6,22 @@ namespace AvailabilityService.Services;
 
 public class AvailabilitySlotService : IAvailabilitySlotService
 {
-    private readonly InMemoryAvailabilityStore _store;
+    private readonly IAvailabilityRepository _repository;
     private readonly AvailabilityOptions _options;
     private readonly TimeZoneInfo _timeZone;
 
     public AvailabilitySlotService(
-        InMemoryAvailabilityStore store,
+        IAvailabilityRepository repository,
         IOptions<AvailabilityOptions> options)
     {
-        _store = store;
+        _repository = repository;
         _options = options.Value;
         _timeZone = ResolveTimeZone(_options.TimeZone);
     }
 
-    public SlotsResponse GetSlots(Guid tenantId, Guid serviceId, DateOnly date)
+    public async Task<SlotsResponse> GetSlotsAsync(Guid tenantId, Guid serviceId, DateOnly date, CancellationToken ct)
     {
-        var activeException = _store.Exceptions.Values.FirstOrDefault(e =>
-            e.IsActive &&
-            e.TenantId == tenantId &&
-            e.ServiceId == serviceId &&
-            e.ExceptionDate == date);
+        var activeException = await _repository.GetActiveExceptionAsync(tenantId, serviceId, date, ct);
 
         if (activeException is not null)
         {
@@ -40,14 +36,7 @@ public class AvailabilitySlotService : IAvailabilitySlotService
         }
 
         var dayOfWeek = ToDomainDayOfWeek(date.DayOfWeek);
-        var rules = _store.Rules.Values
-            .Where(r => r.IsActive &&
-                        r.TenantId == tenantId &&
-                        r.ServiceId == serviceId &&
-                        r.DayOfWeek == dayOfWeek)
-            .OrderBy(r => r.OperatingStartTime)
-            .ThenBy(r => r.OperatingEndTime)
-            .ToList();
+        var rules = await _repository.GetActiveRulesByDayAsync(tenantId, serviceId, dayOfWeek, ct);
 
         var slots = new List<SlotDto>();
         var slotDuration = TimeSpan.FromMinutes(_options.SlotDurationMinutes);
@@ -106,4 +95,3 @@ public class AvailabilitySlotService : IAvailabilitySlotService
         }
     }
 }
-

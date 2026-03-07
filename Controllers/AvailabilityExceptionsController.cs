@@ -8,15 +8,15 @@ namespace AvailabilityService.Controllers;
 [Route("availability/exceptions")]
 public class AvailabilityExceptionsController : ControllerBase
 {
-    private readonly InMemoryAvailabilityStore _store;
+    private readonly IAvailabilityRepository _repository;
 
-    public AvailabilityExceptionsController(InMemoryAvailabilityStore store)
+    public AvailabilityExceptionsController(IAvailabilityRepository repository)
     {
-        _store = store;
+        _repository = repository;
     }
 
     [HttpPost]
-    public IActionResult Create([FromBody] CreateExceptionRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateExceptionRequest request, CancellationToken ct)
     {
         if (!DateOnly.TryParse(request.ExceptionDate, out var exceptionDate))
         {
@@ -39,16 +39,17 @@ public class AvailabilityExceptionsController : ControllerBase
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        _store.Exceptions[item.RuleExceptionId] = item;
+        await _repository.AddExceptionAsync(item, ct);
         return Created($"/availability/exceptions/{item.RuleExceptionId}", item);
     }
 
     [HttpGet]
-    public IActionResult Get(
+    public async Task<IActionResult> Get(
         [FromQuery] Guid tenantId,
         [FromQuery] Guid serviceId,
         [FromQuery] string from,
-        [FromQuery] string to)
+        [FromQuery] string to,
+        CancellationToken ct)
     {
         if (!DateOnly.TryParse(from, out var fromDate))
         {
@@ -65,21 +66,16 @@ public class AvailabilityExceptionsController : ControllerBase
             return BadRequest(Error("to must be >= from"));
         }
 
-        var results = _store.Exceptions.Values
-            .Where(e => e.TenantId == tenantId &&
-                        e.ServiceId == serviceId &&
-                        e.ExceptionDate >= fromDate &&
-                        e.ExceptionDate <= toDate)
-            .OrderBy(e => e.ExceptionDate)
-            .ToList();
+        var results = await _repository.GetExceptionsAsync(tenantId, serviceId, fromDate, toDate, ct);
 
         return Ok(results);
     }
 
     [HttpDelete("{ruleExceptionId:guid}")]
-    public IActionResult Delete(Guid ruleExceptionId)
+    public async Task<IActionResult> Delete(Guid ruleExceptionId, CancellationToken ct)
     {
-        if (!_store.Exceptions.TryRemove(ruleExceptionId, out _))
+        var deleted = await _repository.DeleteExceptionAsync(ruleExceptionId, ct);
+        if (!deleted)
         {
             return NotFound(Error("exceptionId not found"));
         }
@@ -89,4 +85,3 @@ public class AvailabilityExceptionsController : ControllerBase
 
     private static object Error(string message) => new { error = message };
 }
-

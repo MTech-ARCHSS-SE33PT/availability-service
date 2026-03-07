@@ -16,14 +16,14 @@ public class AvailabilitySlotsController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult Get([FromQuery] Guid tenantId, [FromQuery] Guid serviceId, [FromQuery] string date)
+    public async Task<IActionResult> Get([FromQuery] Guid tenantId, [FromQuery] Guid serviceId, [FromQuery] string date, CancellationToken ct)
     {
         if (!DateOnly.TryParse(date, out var parsedDate))
         {
             return BadRequest(new { error = "date must be valid date" });
         }
 
-        var response = _slotService.GetSlots(tenantId, serviceId, parsedDate);
+        var response = await _slotService.GetSlotsAsync(tenantId, serviceId, parsedDate, ct);
         return Ok(response);
     }
 }
