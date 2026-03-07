@@ -1,2 +1,5 @@
 bin/
 obj/
+
+AvailabilityService.Tests/TestResults/
+TestResults/
