@@ -71,3 +71,7 @@ using (var scope = app.Services.CreateScope())
 await AvailabilitySeedData.SeedAsync(app.Services, CancellationToken.None);
 
 app.Run();
+
+public partial class Program
+{
+}
