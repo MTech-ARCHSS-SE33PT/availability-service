@@ -75,6 +75,54 @@ public sealed class AvailabilitySlotServiceTests
     }
 
     [Fact]
+    public async Task GetSlotsAsync_WithMultipleRules_ReturnsSlotsInRuleOrder()
+    {
+        var tenantId = Guid.NewGuid();
+        var serviceId = Guid.NewGuid();
+        var date = new DateOnly(2026, 3, 9); // Monday
+
+        var repository = new FakeAvailabilityRepository
+        {
+            ActiveRules = new List<AvailabilityRule>
+            {
+                new()
+                {
+                    RuleId = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ServiceId = serviceId,
+                    DayOfWeek = 1,
+                    OperatingStartTime = new TimeOnly(9, 0),
+                    OperatingEndTime = new TimeOnly(9, 30),
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow
+                },
+                new()
+                {
+                    RuleId = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    ServiceId = serviceId,
+                    DayOfWeek = 1,
+                    OperatingStartTime = new TimeOnly(13, 0),
+                    OperatingEndTime = new TimeOnly(13, 30),
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow
+                }
+            }
+        };
+
+        var slotService = CreateService(repository);
+
+        var result = await slotService.GetSlotsAsync(tenantId, serviceId, date, CancellationToken.None);
+
+        Assert.Equal(4, result.Slots.Count);
+        Assert.Collection(result.Slots,
+            slot => Assert.Equal(new TimeOnly(9, 0), TimeOnly.FromDateTime(slot.StartTime.DateTime)),
+            slot => Assert.Equal(new TimeOnly(9, 15), TimeOnly.FromDateTime(slot.StartTime.DateTime)),
+            slot => Assert.Equal(new TimeOnly(13, 0), TimeOnly.FromDateTime(slot.StartTime.DateTime)),
+            slot => Assert.Equal(new TimeOnly(13, 15), TimeOnly.FromDateTime(slot.StartTime.DateTime)));
+    }
+
+    [Fact]
     public async Task GetSlotsAsync_WhenNoRules_ReturnsClosed()
     {
         var slotService = CreateService(new FakeAvailabilityRepository());
